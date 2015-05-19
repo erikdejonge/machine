@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -17,6 +18,10 @@ const (
 	envTmpl = `{{ .Prefix }}DOCKER_TLS_VERIFY{{ .Delimiter }}{{ .DockerTLSVerify }}{{ .Suffix }}{{ .Prefix }}DOCKER_HOST{{ .Delimiter }}{{ .DockerHost }}{{ .Suffix }}{{ .Prefix }}DOCKER_CERT_PATH{{ .Delimiter }}{{ .DockerCertPath }}{{ .Suffix }}{{ .UsageHint }}`
 )
 
+var (
+	improperEnvArgsError = errors.New("Error: Expected either one machine name, or -u flag to unset the variables in the arguments.")
+)
+
 type ShellConfig struct {
 	Prefix          string
 	Delimiter       string
@@ -28,8 +33,8 @@ type ShellConfig struct {
 }
 
 func cmdEnv(c *cli.Context) {
-	if len(c.Args()) > 1 {
-		log.Fatal("Error: Expected either a machine name, or -u flag to unset the variables in the arguments.")
+	if len(c.Args()) != 1 && !c.Bool("unset") {
+		log.Fatal(improperEnvArgsError)
 	}
 	userShell := c.String("shell")
 	if userShell == "" {
@@ -205,5 +210,5 @@ func generateUsageHint(appName, machineName, userShell string) string {
 		}
 	}
 
-	return fmt.Sprintf("# Run this command to configure your shell: %s\n", cmd)
+	return fmt.Sprintf("# Run this command to configure your shell: \n# %s\n", cmd)
 }

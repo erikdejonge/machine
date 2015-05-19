@@ -498,7 +498,7 @@ Options:
    --virtualbox-import-boot2docker-vm                                                                   The name of a Boot2Docker VM to import
    --virtualbox-memory "1024"                                                                           Size of memory for host in MB [$VIRTUALBOX_MEMORY_SIZE]
    --driver, -d "none"                                                                                  Driver to create machine with. Available drivers: amazonec2, azure, digitalocean, exoscale, google, none, openstack, rackspace, softlayer, virtualbox, vmwarefusion, vmwarevcloudair, vmwarevsphere
-   --engine-flag [--engine-flag option --engine-flag option]                                            Specify arbitrary flags to include with the created engine in the form flag=value
+   --engine-opt [--engine-opt option --engine-opt option]                                               Specify arbitrary opts to include with the created engine in the form opt=value
    --engine-insecure-registry [--engine-insecure-registry option --engine-insecure-registry option]     Specify insecure registries to allow with the created engine
    --engine-registry-mirror [--engine-registry-mirror option --engine-registry-mirror option]           Specify registry mirrors to use
    --engine-label [--engine-label option --engine-label option]                                         Specify labels for the created engine
@@ -575,17 +575,17 @@ If the engine supports specifying the flag multiple times (such as with
 `--label`), then so does Docker Machine.
 
 In addition to this subset of daemon flags which are directly supported, Docker
-Machine also supports an additional flag, `--engine-flag`, which can be used to
-specify arbitrary daemon options with the syntax `--engine-flag
-flagname=value`.  For example, to specify that the daemon should use `8.8.8.8`
-as the DNS server for all containers, and always use the `syslog` [log
+Machine also supports an additional flag, `--engine-opt`, which can be used to
+specify arbitrary daemon options with the syntax `--engine-opt flagname=value`.
+For example, to specify that the daemon should use `8.8.8.8` as the DNS server
+for all containers, and always use the `syslog` [log
 driver](https://docs.docker.com/reference/run/#logging-drivers-log-driver) you
 could run the following create command:
 
 ```
 $ docker-machine create -d virtualbox \
-    --engine-flag dns=8.8.8.8 \
-    --engine-flag log-driver=syslog \
+    --engine-opt dns=8.8.8.8 \
+    --engine-opt log-driver=syslog \
     gdns
 ```
 
@@ -784,7 +784,29 @@ dev    *        virtualbox   Stopped
 
 #### ls
 
-List machines.
+```
+Usage: docker-machine ls [OPTIONS] [arg...]
+
+List machines
+
+Options:
+
+   --quiet, -q					Enable quiet mode
+   --filter [--filter option --filter option]	Filter output based on conditions provided
+```
+
+##### Filtering
+
+The filtering flag (`-f` or `--filter)` format is a `key=value` pair. If there is more
+than one filter, then pass multiple flags (e.g. `--filter "foo=bar" --filter "bif=baz"`)
+
+The currently supported filters are:
+
+* driver (driver name)
+* swarm (swarm master's name)
+* state (`Running|Paused|Saved|Stopped|Stopping|Starting|Error`)
+
+##### Examples
 
 ```
 $ docker-machine ls
@@ -792,9 +814,13 @@ NAME   ACTIVE   DRIVER       STATE     URL
 dev             virtualbox   Stopped
 foo0            virtualbox   Running   tcp://192.168.99.105:2376
 foo1            virtualbox   Running   tcp://192.168.99.106:2376
-foo2            virtualbox   Running   tcp://192.168.99.107:2376
-foo3            virtualbox   Running   tcp://192.168.99.108:2376
-foo4   *        virtualbox   Running   tcp://192.168.99.109:2376
+foo2   *        virtualbox   Running   tcp://192.168.99.107:2376
+```
+
+```
+$ docker-machine ls --filter driver=virtualbox --filter state=Stopped
+NAME   ACTIVE   DRIVER       STATE     URL   SWARM
+dev             virtualbox   Stopped
 ```
 
 #### regenerate-certs
@@ -887,6 +913,33 @@ cgroup                  499.8M         0    499.8M   0% /sys/fs/cgroup
 /mnt/sda1/var/lib/docker/aufs
 ```
 
+#### scp
+
+Copy files from your local host to a machine, from machine to machine, or from a
+machine to your local host using `scp`.
+
+The notation is `machinename:/path/to/files` for the arguments; in the host
+machine's case, you don't have to specify the name, just the path.
+
+Consider the following example:
+
+```
+$ cat foo.txt
+cat: foo.txt: No such file or directory
+$ docker-machine ssh dev pwd
+/home/docker
+$ docker-machine ssh dev 'echo A file created remotely! >foo.txt'
+$ docker-machine scp dev:/home/docker/foo.txt .
+foo.txt                                                           100%   28     0.0KB/s   00:00
+$ cat foo.txt
+A file created remotely!
+```
+
+Files are copied recursively by default (`scp`'s `-r` flag).
+
+In the case of transfering files from machine to machine, they go through the
+local host's filesystem first (using `scp`'s `-3` flag).
+
 #### start
 
 Gracefully start a machine.
@@ -961,6 +1014,7 @@ Options:
  - `--amazonec2-vpc-id`: **required** Your VPC ID to launch the instance in.
  - `--amazonec2-zone`: The AWS zone launch the instance in (i.e. one of a,b,c,d,e). Default: `a`
  - `--amazonec2-private-address-only`: Use the private IP address only
+ - `--amazonec2-monitoring`: Enable CloudWatch Monitoring.
 
 By default, the Amazon EC2 driver will use a daily image of Ubuntu 14.04 LTS.
 
@@ -999,6 +1053,22 @@ Options:
 
 The DigitalOcean driver will use `ubuntu-14-04-x64` as the default image.
 
+#### Generic
+Create machines using an existing VM/Host with SSH.
+
+This is useful if you are using a provider that Machine does not support
+directly or if you would like to import an existing host to allow Docker
+Machine to manage.
+
+Options:
+
+ - `--generic-ip-address`: IP Address of host
+ - `--generic-ssh-user`: SSH username used to connect (default: `root`)
+ - `--generic-ssh-key`: Path to the SSH user private key
+ - `--generic-ssh-port`: Port to use for SSH (default: `22`)
+
+> Note: you must use a base Operating System supported by Machine.
+
 #### Google Compute Engine
 Create machines on [Google Compute Engine](https://cloud.google.com/compute/).  You will need a Google account and project name.  See https://cloud.google.com/compute/docs/projects for details on projects.
 
@@ -1014,7 +1084,7 @@ Options:
  - `--google-scopes`: The scopes for OAuth 2.0 to Access Google APIs. See [Google Compute Engine Doc](https://cloud.google.com/storage/docs/authentication).
  - `--google-disk-size`: The disk size of instance. Default: `10`
  - `--google-disk-type`: The disk type of instance. Default: `pd-standard`
- 
+
 The GCE driver will use the `ubuntu-1404-trusty-v20150316` instance type unless otherwise specified.
 
 #### IBM Softlayer

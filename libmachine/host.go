@@ -2,6 +2,7 @@ package libmachine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -21,8 +22,9 @@ import (
 )
 
 var (
-	validHostNameChars   = `[a-zA-Z0-9\-\.]`
-	validHostNamePattern = regexp.MustCompile(`^` + validHostNameChars + `+$`)
+	validHostNameChars                = `[a-zA-Z0-9\-\.]`
+	validHostNamePattern              = regexp.MustCompile(`^` + validHostNameChars + `+$`)
+	errMachineMustBeRunningForUpgrade = errors.New("Error: machine must be running to upgrade.")
 )
 
 type Host struct {
@@ -136,25 +138,7 @@ func (h *Host) Create(name string) error {
 }
 
 func (h *Host) RunSSHCommand(command string) (ssh.Output, error) {
-	var output ssh.Output
-
-	addr, err := h.Driver.GetSSHHostname()
-	if err != nil {
-		return output, err
-	}
-
-	port, err := h.Driver.GetSSHPort()
-	if err != nil {
-		return output, err
-	}
-
-	auth := &ssh.Auth{
-		Keys: []string{h.Driver.GetSSHKeyPath()},
-	}
-
-	client, err := ssh.NewClient(h.Driver.GetSSHUsername(), addr, port, auth)
-
-	return client.Run(command)
+	return drivers.RunSSHCommandFromDriver(h.Driver, command)
 }
 
 func (h *Host) CreateSSHShell() error {
@@ -243,6 +227,15 @@ func (h *Host) Restart() error {
 }
 
 func (h *Host) Upgrade() error {
+	machineState, err := h.Driver.GetState()
+	if err != nil {
+		return err
+	}
+
+	if machineState != state.Running {
+		log.Fatal(errMachineMustBeRunningForUpgrade)
+	}
+
 	provisioner, err := provision.DetectProvisioner(h.Driver)
 	if err != nil {
 		return err
@@ -319,12 +312,21 @@ func (h *Host) LoadConfig() error {
 }
 
 func (h *Host) ConfigureAuth() error {
+	if err := h.LoadConfig(); err != nil {
+		return err
+	}
+
 	provisioner, err := provision.DetectProvisioner(h.Driver)
 	if err != nil {
 		return err
 	}
 
-	if err := provision.ConfigureAuth(provisioner); err != nil {
+	// TODO: This is kind of a hack (or is it?  I'm not really sure until
+	// we have more clearly defined outlook on what the responsibilities
+	// and modularity of the provisioners should be).
+	//
+	// Call provision to re-provision the certs properly.
+	if err := provisioner.Provision(swarm.SwarmOptions{}, *h.HostOptions.AuthOptions, *h.HostOptions.EngineOptions); err != nil {
 		return err
 	}
 
@@ -352,37 +354,8 @@ func (h *Host) PrintIP() error {
 	return nil
 }
 
-func sshAvailableFunc(h *Host) func() bool {
-	return func() bool {
-		log.Debug("Getting to WaitForSSH function...")
-		hostname, err := h.Driver.GetSSHHostname()
-		if err != nil {
-			log.Debugf("Error getting IP address waiting for SSH: %s", err)
-			return false
-		}
-		port, err := h.Driver.GetSSHPort()
-		if err != nil {
-			log.Debugf("Error getting SSH port: %s", err)
-			return false
-		}
-		if err := ssh.WaitForTCP(fmt.Sprintf("%s:%d", hostname, port)); err != nil {
-			log.Debugf("Error waiting for TCP waiting for SSH: %s", err)
-			return false
-		}
-
-		if _, err := h.RunSSHCommand("exit 0"); err != nil {
-			log.Debugf("Error getting ssh command 'exit 0' : %s", err)
-			return false
-		}
-		return true
-	}
-}
-
 func WaitForSSH(h *Host) error {
-	if err := utils.WaitFor(sshAvailableFunc(h)); err != nil {
-		return fmt.Errorf("Too many retries.  Last error: %s", err)
-	}
-	return nil
+	return drivers.WaitForSSH(h.Driver)
 }
 
 func getHostState(host Host, hostListItemsChan chan<- HostListItem) {

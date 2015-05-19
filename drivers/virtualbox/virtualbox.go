@@ -330,10 +330,13 @@ func (d *Driver) Create() error {
 
 	var shareName, shareDir string // TODO configurable at some point
 	switch runtime.GOOS {
+	case "windows":
+		shareName = "c/Users"
+		shareDir = "c:\\Users"
 	case "darwin":
 		shareName = "Users"
 		shareDir = "/Users"
-		// TODO "linux" and "windows"
+		// TODO "linux"
 	}
 
 	if shareDir != "" {
@@ -391,6 +394,10 @@ func (d *Driver) Start() error {
 		log.Infof("Resuming VM ...")
 	default:
 		log.Infof("VM not in restartable state")
+	}
+
+	if err := drivers.WaitForSSH(d); err != nil {
+		return err
 	}
 
 	d.IPAddress, err = d.GetIP()

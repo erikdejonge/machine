@@ -43,7 +43,7 @@ buildMachineWithOldIsoCheckUpgrade() {
 }
 
 @test "$DRIVER: machine should not exist" {
-  run machine active $NAME
+  run machine inspect $NAME
   [ "$status" -eq 1  ]
 }
 
@@ -57,9 +57,9 @@ buildMachineWithOldIsoCheckUpgrade() {
   [ "$status" -eq 0  ]
 }
 
-@test "$DRIVER: active" {
-  run machine active $NAME
-  [ "$status" -eq 0  ]
+@test "$DRIVER: quiet ls" {
+  run machine ls -q
+  [[ ${output} == "$NAME" ]]
 }
 
 @test "$DRIVER: check default machine memory size" {
@@ -117,6 +117,11 @@ buildMachineWithOldIsoCheckUpgrade() {
   run machine ls
   [ "$status" -eq 0  ]
   [[ ${lines[1]} == *"Stopped"*  ]]
+}
+
+@test "$DRIVER: machine should not allow upgrade when stopped" {
+  run machine upgrade $NAME
+  [[ "$status" -eq 1 ]]
 }
 
 @test "$DRIVER: start" {
@@ -203,7 +208,7 @@ buildMachineWithOldIsoCheckUpgrade() {
 }
 
 @test "$DRIVER: machine should not exist after remove" {
-  run machine active $NAME
+  run machine inspect $NAME
   [ "$status" -eq 1  ]
 }
 
@@ -214,7 +219,7 @@ buildMachineWithOldIsoCheckUpgrade() {
 
 @test "$DRIVER: create with arbitrary engine option" {
   run machine create -d $DRIVER \
-    --engine-flag log-driver=none \
+    --engine-opt log-driver=none \
     $NAME
   [ $status -eq 0 ]
 }
@@ -304,6 +309,11 @@ buildMachineWithOldIsoCheckUpgrade() {
 
 @test "$DRIVER: remove after bad boot2docker url" {
   run machine rm -f $NAME
+  [ "$status" -eq 0  ]
+}
+
+@test "$DRIVER: create with no storage driver" {
+  run machine create -d $DRIVER --engine-storage-driver "" $NAME
   [ "$status" -eq 0  ]
 }
 

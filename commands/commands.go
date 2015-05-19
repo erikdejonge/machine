@@ -17,6 +17,7 @@ import (
 	_ "github.com/docker/machine/drivers/azure"
 	_ "github.com/docker/machine/drivers/digitalocean"
 	_ "github.com/docker/machine/drivers/exoscale"
+	_ "github.com/docker/machine/drivers/generic"
 	_ "github.com/docker/machine/drivers/google"
 	_ "github.com/docker/machine/drivers/hyperv"
 	_ "github.com/docker/machine/drivers/none"
@@ -166,7 +167,7 @@ var sharedCreateFlags = []cli.Flag{
 		Value: "none",
 	},
 	cli.StringSliceFlag{
-		Name:  "engine-flag",
+		Name:  "engine-opt",
 		Usage: "Specify arbitrary flags to include with the created engine in the form flag=value",
 		Value: &cli.StringSlice{},
 	},
@@ -188,7 +189,6 @@ var sharedCreateFlags = []cli.Flag{
 	cli.StringFlag{
 		Name:  "engine-storage-driver",
 		Usage: "Specify a storage driver to use with the engine",
-		Value: "aufs",
 	},
 	cli.BoolFlag{
 		Name:  "swarm",
@@ -293,6 +293,11 @@ var Commands = []cli.Command{
 				Name:  "quiet, q",
 				Usage: "Enable quiet mode",
 			},
+			cli.StringSliceFlag{
+				Name:  "filter",
+				Usage: "Filter output based on conditions provided",
+				Value: &cli.StringSlice{},
+			},
 		},
 		Name:   "ls",
 		Usage:  "List machines",
@@ -333,6 +338,18 @@ var Commands = []cli.Command{
 		Usage:       "Log into or run a command on a machine with SSH.",
 		Description: "Arguments are [machine-name] [command]",
 		Action:      cmdSsh,
+	},
+	{
+		Name:        "scp",
+		Usage:       "Copy files between machines",
+		Description: "Arguments are [machine:][path] [machine:][path].",
+		Action:      cmdScp,
+		Flags: []cli.Flag{
+			cli.BoolFlag{
+				Name:  "recursive, r",
+				Usage: "Copy files recursively (required to copy directories)",
+			},
+		},
 	},
 	{
 		Name:        "start",
@@ -543,6 +560,9 @@ func getMachineConfig(c *cli.Context) (*machineConfig, error) {
 	}
 
 	m, err := mcn.Get(name)
+	if err != nil {
+		return nil, err
+	}
 
 	machineDir := filepath.Join(utils.GetMachineDir(), m.Name)
 	caCert := filepath.Join(machineDir, "ca.pem")
@@ -612,8 +632,8 @@ func getCertPathInfo(c *cli.Context) libmachine.CertPathInfo {
 func detectShell() (string, error) {
 	// attempt to get the SHELL env var
 	shell := filepath.Base(os.Getenv("SHELL"))
-	// none detected; check for windows env
-	if runtime.GOOS == "windows" {
+	// none detected; check for windows env and not bash (i.e. msysgit, etc)
+	if runtime.GOOS == "windows" && shell == "" {
 		log.Printf("On Windows, please specify either 'cmd' or 'powershell' with the --shell flag.\n\n")
 		return "", ErrUnknownShell
 	}
