@@ -19,7 +19,6 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/docker/machine/drivers"
 	"github.com/docker/machine/log"
-	"github.com/docker/machine/provider"
 	"github.com/docker/machine/ssh"
 	"github.com/docker/machine/state"
 	"github.com/docker/machine/utils"
@@ -124,10 +123,6 @@ func (d *Driver) GetSSHUsername() string {
 	}
 
 	return d.SSHUser
-}
-
-func (d *Driver) GetProviderType() provider.ProviderType {
-	return provider.Local
 }
 
 func (d *Driver) DriverName() string {
@@ -273,7 +268,7 @@ func (d *Driver) Create() error {
 
 	if err := vbm("modifyvm", d.MachineName,
 		"--nic1", "nat",
-		"--nictype1", "virtio",
+		"--nictype1", "82540EM",
 		"--cableconnected1", "on"); err != nil {
 		return err
 	}
@@ -289,7 +284,7 @@ func (d *Driver) Create() error {
 	}
 	if err := vbm("modifyvm", d.MachineName,
 		"--nic2", "hostonly",
-		"--nictype2", "virtio",
+		"--nictype2", "82540EM",
 		"--hostonlyadapter2", hostOnlyNetwork.Name,
 		"--cableconnected2", "on"); err != nil {
 		return err
@@ -503,20 +498,15 @@ func (d *Driver) GetIP() (string, error) {
 	if s != state.Running {
 		return "", drivers.ErrHostIsNotRunning
 	}
+
 	output, err := drivers.RunSSHCommandFromDriver(d, "ip addr show dev eth1")
 	if err != nil {
 		return "", err
 	}
 
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(output.Stdout); err != nil {
-		return "", err
-	}
-
-	out := buf.String()
-	log.Debugf("SSH returned: %s\nEND SSH\n", out)
+	log.Debugf("SSH returned: %s\nEND SSH\n", output)
 	// parse to find: inet 192.168.59.103/24 brd 192.168.59.255 scope global eth1
-	lines := strings.Split(out, "\n")
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		vals := strings.Split(strings.TrimSpace(line), " ")
 		if len(vals) >= 2 && vals[0] == "inet" {
@@ -524,7 +514,7 @@ func (d *Driver) GetIP() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("No IP address found %s", out)
+	return "", fmt.Errorf("No IP address found %s", output)
 }
 
 func (d *Driver) publicSSHKeyPath() string {
