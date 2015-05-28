@@ -11,6 +11,7 @@ import (
 	"github.com/docker/machine/libmachine/provision/pkgaction"
 	"github.com/docker/machine/libmachine/swarm"
 	"github.com/docker/machine/log"
+	"github.com/docker/machine/ssh"
 	"github.com/docker/machine/utils"
 )
 
@@ -18,7 +19,7 @@ const (
 	// TODO: eventually the RPM install process will be integrated
 	// into the get.docker.com install script; for now
 	// we install via vendored RPMs
-	dockerRHELRPMPath = "https://docker-mcn.s3.amazonaws.com/public/redhat/rpms/docker-engine-1.6.1-0.0.20150511.171646.git1b47f9f.el7.centos.x86_64.rpm"
+	dockerRHELRPMPath = "https://test.docker.com/rpm/1.7.0-rc1/centos-7/RPMS/x86_64/docker-engine-1.7.0-0.1.rc1.el7.centos.x86_64.rpm"
 )
 
 func init() {
@@ -45,6 +46,47 @@ func NewRedHatProvisioner(d drivers.Driver) Provisioner {
 type RedHatProvisioner struct {
 	GenericProvisioner
 	DockerRPMPath string
+}
+
+func (provisioner *RedHatProvisioner) SSHCommand(args string) (string, error) {
+	client, err := drivers.GetSSHClientFromDriver(provisioner.Driver)
+	if err != nil {
+		return "", err
+	}
+
+	// redhat needs "-t" for tty allocation on ssh therefore we check for the
+	// external client and add as needed
+	// TODO: does this need to be done for the native ssh client?
+	if c, ok := client.(ssh.ExternalClient); ok {
+		log.Debugf("detected external ssh; added tty allocation flag")
+		c.BaseArgs = append(c.BaseArgs, "-t")
+		client = c
+	}
+
+	return client.Output(args)
+}
+
+func (provisioner *RedHatProvisioner) SetHostname(hostname string) error {
+	// we have to have SetHostname here as well to use the RedHat provisioner
+	// SSHCommand to add the tty allocation
+	if _, err := provisioner.SSHCommand(fmt.Sprintf(
+		"sudo hostname %s && echo %q | sudo tee /etc/hostname",
+		hostname,
+		hostname,
+	)); err != nil {
+		return err
+	}
+
+	// ubuntu/debian use 127.0.1.1 for non "localhost" loopback hostnames: https://www.debian.org/doc/manuals/debian-reference/ch05.en.html#_the_hostname_resolution
+	if _, err := provisioner.SSHCommand(fmt.Sprintf(
+		"if grep -xq 127.0.1.1.* /etc/hosts; then sudo sed -i 's/^127.0.1.1.*/127.0.1.1 %s/g' /etc/hosts; else echo '127.0.1.1 %s' | sudo tee -a /etc/hosts; fi",
+		hostname,
+		hostname,
+	)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (provisioner *RedHatProvisioner) Service(name string, action pkgaction.ServiceAction) error {
