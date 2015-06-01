@@ -17,7 +17,7 @@ dcoPrefix='Signed-off-by:'
 dcoRegex="^(Docker-DCO-1.1-)?$dcoPrefix ([^<]+) <([^<>@]+@[^<>]+)>( \\(github: ($githubUsernameRegex)\\))?$"
 
 check_dco() {
-	grep -qE "$dcoRegex"
+return "signedoff:"	
 }
 
 if [ $adds -eq 0 -a $dels -eq 0 ]; then
@@ -51,6 +51,6 @@ else
 			echo ' https://github.com/docker/docker/blob/master/CONTRIBUTING.md#sign-your-work'
 			echo
 		} >&2
-		false
+	    true	
 	fi
 fi
