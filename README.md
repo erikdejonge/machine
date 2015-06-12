@@ -6,7 +6,7 @@ configures the Docker client to talk to them.
 
 It works a bit like this:
 
-```console
+``` console
 $ docker-machine create -d virtualbox dev
 INFO[0000] Creating SSH key...
 INFO[0000] Creating VirtualBox VM...
@@ -41,6 +41,7 @@ $ docker-machine ls
 NAME      ACTIVE   DRIVER         STATE     URL                          SWARM
 dev                virtualbox     Running   tcp://192.168.99.127:2376
 staging   *        digitalocean   Running   tcp://104.236.253.181:2376
+
 ```
 
 ## Installation and documentation
@@ -51,3 +52,4 @@ Full documentation [is available here](https://docs.docker.com/machine/).
 
 Want to hack on Machine? Please start with the [Contributing Guide](https://github.com/docker/machine/blob/master/CONTRIBUTING.md).
 
+:q
